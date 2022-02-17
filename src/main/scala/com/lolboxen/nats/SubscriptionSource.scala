@@ -71,7 +71,7 @@ class SubscriptionSource(adapter: SubscriptionAdapter) extends GraphStageWithMat
         if (!terminating && !fetchInProgress && isConnected) {
           implicit val ec: ExecutionContextExecutor = materializer.executionContext
           val rate = if (fps.hasRate) fps.rate().toInt else 1
-          val batchSize = rate - queue.length
+          val batchSize = if (rate == 0 && queue.length == 1) 1 else rate - queue.length
           if (batchSize > 0) {
             adapter.fetch(batchSize).onComplete(fetchCallback.invoke)
             fetchInProgress = true
