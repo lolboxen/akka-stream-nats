@@ -66,7 +66,7 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
     tryAck match {
       case Success(Some(ack)) =>
         pendingAck.dropWhileInPlace(_ == (promise, message, context))
-        promise.success((ack, message, context))
+        promise.trySuccess((ack, message, context))
         finalizeIfNeeded()
 
       case Success(None) => // publish disconnected thus do nothing and republish on connect
@@ -74,7 +74,7 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
       case Failure(cause) if cachedConnectionVersion == connectionVersion =>
         decider(cause) match {
           case Supervision.Stop => failStage(cause)
-          case _ => promise.failure(cause)
+          case _ => promise.tryFailure(cause)
         }
 
       case _ =>
