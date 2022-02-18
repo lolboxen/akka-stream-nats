@@ -6,7 +6,7 @@ import io.nats.client.{Message, MessageHandler}
 import scala.collection.mutable
 import scala.concurrent.Future
 
-class CoreSubscriptionFetch extends SubscriptionFetch with MessageHandler  {
+class SubscriptionPushFetch extends SubscriptionFetch with MessageHandler  {
 
   private val lock = new ReentrantGuard()
   private val notFull = lock.newCondition()

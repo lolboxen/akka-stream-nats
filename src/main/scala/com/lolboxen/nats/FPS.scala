@@ -1,25 +1,21 @@
 package com.lolboxen.nats
 
+import java.time.Duration
 import scala.collection.mutable
 
-class FPS(history: Int) {
+class FPS {
 
-  private val duration: mutable.ListBuffer[Long] = mutable.ListBuffer.empty
-  private var last: Long = 0L
+  private val oneSecond = Duration.ofSeconds(1).toNanos
+  private val timestamps: mutable.ListBuffer[Long] = mutable.ListBuffer.empty
 
-  def begin(): Unit = last = System.nanoTime()
-
-  def stop(): Unit = {
-    val now = System.nanoTime()
-    if (last != 0) {
-      val delta = now - last
-      duration += delta
-      duration.dropInPlace((duration.length - history).max(0))
-    }
-    last = 0
+  def mark(): Unit = {
+    val nanoNow = System.nanoTime()
+    val trimBefore = nanoNow - oneSecond
+    timestamps.dropWhileInPlace(_ < trimBefore)
+    timestamps += nanoNow
   }
 
-  def hasRate: Boolean = duration.nonEmpty
+  def hasRate: Boolean = timestamps.nonEmpty
 
-  def rate(): Double = 1000000000.0 / (duration.sum / duration.length)
+  def rate(): Double = timestamps.length
 }

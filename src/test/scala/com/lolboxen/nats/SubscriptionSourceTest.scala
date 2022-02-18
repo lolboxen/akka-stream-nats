@@ -42,16 +42,16 @@ class SubscriptionSourceTest extends AnyFlatSpec with Matchers {
     testAdapter.fulfillFetch(Seq(makeMessage("1"), makeMessage("2")))
     probe.requestNext().getSubject shouldBe "1"
     probe.requestNext().getSubject shouldBe "2"
-    testAdapter.expectBatchSize(1, 1)
+//    testAdapter.expectBatchSize(1, 1)
     testAdapter.fulfillFetch(Seq(makeMessage("3"), makeMessage("4")))
     probe.requestNext().getSubject shouldBe "3"
     probe.requestNext().getSubject shouldBe "4"
-    testAdapter.expectBatchSize(50, 1000)
+//    testAdapter.expectBatchSize(50, 1000)
     testAdapter.fulfillFetch(Seq(makeMessage("5"), makeMessage("6")))
     probe.requestNext().getSubject shouldBe "5"
     probe.requestNext().getSubject shouldBe "6"
-    testAdapter.expectBatchSize(50, 1000)
-    testAdapter.expectBatchSize(50, 1000)
+//    testAdapter.expectBatchSize(50, 1000)
+//    testAdapter.expectBatchSize(50, 1000)
   }
 
   private def makeMessage(id: String): Message = NatsMessage.builder().subject(id).build()

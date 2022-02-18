@@ -6,7 +6,7 @@ class CoreSubscriptionAdapter(natsConnection: NatsConnection,
                               subject: String)
   extends BaseSubscriptionAdapter(natsConnection, subject) {
   override protected def createSubscriptionFetch(connection: Connection): SubscriptionFetch = {
-    val subscription = new CoreSubscriptionFetch
+    val subscription = new SubscriptionPushFetch
     connection.createDispatcher(subscription).subscribe(subject)
     subscription
   }

@@ -19,7 +19,7 @@ class SubscriptionSource(adapter: SubscriptionAdapter) extends GraphStageWithMat
       val shutdownPromise: Promise[Done] = Promise[Done]()
       val fetchCallback: AsyncCallback[Try[Seq[Message]]] = getAsyncCallback(fetchComplete)
       val queue: mutable.Queue[Message] = mutable.Queue.empty
-      val fps = new FPS(100)
+      val fps = new FPS
       var isConnected: Boolean = false
       var fetchInProgress: Boolean = false
       var terminating: Boolean = false
@@ -79,10 +79,9 @@ class SubscriptionSource(adapter: SubscriptionAdapter) extends GraphStageWithMat
         }
 
       def pushIfNeeded(): Unit = {
-        fps.stop()
         if (isAvailable(out) && !isClosed(out) && queue.nonEmpty) {
           push(out, queue.dequeue())
-          fps.begin()
+          fps.mark()
         }
       }
 
