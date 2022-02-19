@@ -58,8 +58,6 @@ class SubscriptionSource(adapter: SubscriptionAdapter) extends GraphStageWithMat
       override def whenShutdown: Future[Done] = shutdownPromise.future
 
       setHandler(out, new OutHandler {
-        override def onDownstreamFinish(): Unit = super.onDownstreamFinish()
-
         override def onPull(): Unit = {
           ensureQueueHasItems()
           pushIfNeeded()

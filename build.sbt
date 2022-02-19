@@ -1,11 +1,11 @@
 organization := "com.lolboxen"
 name := "akka-stream-nats"
-version := "0.1.3"
+version := "0.1.4"
 ThisBuild / versionScheme := Some("semver-spec")
 
 scalaVersion := "2.13.8"
 
-val akkaVer = "2.5.32"
+val akkaVer = "2.6.18"
 
 libraryDependencies ++= Seq(
   "io.nats" % "jnats" % "2.13.2",

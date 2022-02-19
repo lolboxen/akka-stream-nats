@@ -41,29 +41,29 @@ class PublishFlowTest extends AnyFlatSpec with Matchers {
   it should "apply back pressure when publish queue is full" in {
     val support = new TestSupport
 
-    val (queue, _) = Source.queue(1, OverflowStrategy.dropNew)
+    val (queue, _) = Source.queue(1)
       .via(Flow.fromGraph(new PublishFlow[String](support)))
       .toMat(TestSink.probe)(Keep.both)
       .run()
 
-    Await.ready(queue.offer(message -> "1"), 1.second)
-    Await.ready(queue.offer(message -> "2"), 1.second)
-    assertResult(Some(Try(QueueOfferResult.dropped)))(Await.ready(queue.offer(message -> "3"), 1.second).value)
+    queue.offer(message -> "1")
+    queue.offer(message -> "2")
+    queue.offer(message -> "3") shouldBe QueueOfferResult.dropped
     queue.complete()
   }
 
   it should "respect downstream backpressure" in {
     val support = new TestSupport
 
-    val queue = Source.queue(1, OverflowStrategy.dropNew)
+    val queue = Source.queue(1)
       .via(Flow.fromGraph(new PublishFlow[String](support)))
       .toMat(TestSink.probe)(Keep.left)
       .run()
 
     support.giveth()
-    Await.ready(queue.offer(message -> "1"), 1.second)
-    Await.ready(queue.offer(message -> "2"), 1.second)
-    assertResult(Some(Try(QueueOfferResult.dropped)))(Await.ready(queue.offer(message -> "3"), 1.second).value)
+    queue.offer(message -> "1")
+    queue.offer(message -> "2")
+    queue.offer(message -> "3") shouldBe QueueOfferResult.dropped
     queue.complete()
   }
 
