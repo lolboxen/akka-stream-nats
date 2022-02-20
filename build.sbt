@@ -1,6 +1,6 @@
 organization := "com.lolboxen"
 name := "akka-stream-nats"
-version := "0.1.4"
+version := "0.1.5"
 ThisBuild / versionScheme := Some("semver-spec")
 
 scalaVersion := "2.13.8"

@@ -28,8 +28,10 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
     with StageLogging
     with AdapterListener {
 
-  val publishCompletionCallback: AsyncCallback[(Promise[(PublishAck, Message, Context)], (Message, Context), Try[Option[PublishAck]], Int)] = getAsyncCallback(publishCompletion)
-  val pendingAck: ListBuffer[(Promise[(PublishAck, Message, Context)], Message, Context)] = ListBuffer.empty
+  case class TrackedMessage(promise: Promise[(PublishAck, Message, Context)], message: Message, context: Context)
+
+  val publishCompletionCallback: AsyncCallback[(TrackedMessage, Try[Option[PublishAck]], Int)] = getAsyncCallback(publishCompletion)
+  val pendingAck: ListBuffer[TrackedMessage] = ListBuffer.empty
   var finalizer: Option[Try[Done]] = None
   // messages that were delivered but not acked can fail as much as two minutes later across a reconnect event
   // connection version will filter out those publish promises
@@ -53,7 +55,7 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
   override def resumeOperations(): Unit = {
     connectionVersion += 1
     setHandler(stage.out, Demand)
-    pendingAck.foreach { case (promise, message, context) => publish(promise, (message, context))}
+    pendingAck.foreach(publish)
     if (isAvailable(stage.out) && !hasBeenPulled(stage.in)) tryPull(stage.in)
   }
 
@@ -61,12 +63,12 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
 
   override def suspendOperationsIndefinitely(cause: Throwable): Unit = failStage(cause)
 
-  def publishCompletion(result: (Promise[(PublishAck, Message, Context)], (Message, Context), Try[Option[PublishAck]], Int)): Unit = {
-    val (promise, (message, context), tryAck, cachedConnectionVersion) = result
+  def publishCompletion(result: (TrackedMessage, Try[Option[PublishAck]], Int)): Unit = {
+    val (track, tryAck, cachedConnectionVersion) = result
     tryAck match {
       case Success(Some(ack)) =>
-        pendingAck.dropWhileInPlace(_ == (promise, message, context))
-        promise.trySuccess((ack, message, context))
+        pendingAck -= track
+        track.promise.trySuccess((ack, track.message, track.context))
         finalizeIfNeeded()
 
       case Success(None) => // publish disconnected thus do nothing and republish on connect
@@ -74,7 +76,10 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
       case Failure(cause) if cachedConnectionVersion == connectionVersion =>
         decider(cause) match {
           case Supervision.Stop => failStage(cause)
-          case _ => promise.tryFailure(cause)
+          case _ =>
+            pendingAck -= track
+            track.promise.tryFailure(cause)
+            finalizeIfNeeded()
         }
 
       case _ =>
@@ -82,16 +87,17 @@ class PublishFlowStageLogic[Context](stage: PublishFlow[Context],
   }
 
   def publishAndPush(pair: (Message, Context)): Unit = {
+    val (message, context) = pair
     val promise = Promise[(PublishAck, Message, Context)]()
-    publish(promise, pair)
+    val track = TrackedMessage(promise, message, context)
+    publish(track)
     push(stage.out, promise.future)
-    pendingAck.addOne((promise, pair._1, pair._2))
+    pendingAck += track
   }
 
-  def publish(promise: Promise[(PublishAck, Message, Context)], pair: (Message, Context)): Unit = {
+  def publish(track: TrackedMessage): Unit = {
     implicit val ec: ExecutionContextExecutor = materializer.executionContext
-    val (message, _) = pair
-    adapter(message).onComplete(x => publishCompletionCallback.invoke((promise, pair, x, connectionVersion)))
+    adapter(track.message).onComplete(x => publishCompletionCallback.invoke((track, x, connectionVersion)))
   }
 
   def finalizeIfNeeded(): Unit =
