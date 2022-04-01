@@ -1,111 +1,73 @@
 package com.lolboxen.nats
 
-import akka.actor.{ActorSystem, Cancellable}
-import akka.stream.scaladsl.{Flow, Keep, Source}
-import akka.stream.testkit.scaladsl.TestSink
-import akka.stream.{OverflowStrategy, QueueOfferResult}
-import io.nats.client.Message
-import io.nats.client.api.PublishAck
-import io.nats.client.impl.NatsMessage
-import org.scalatest.flatspec.AnyFlatSpec
+import akka.actor.ActorSystem
+import akka.stream.FlowShape
+import akka.stream.scaladsl.{GraphDSL, Keep, Source}
+import akka.stream.testkit.TestPublisher
+import akka.stream.testkit.scaladsl.{TestSink, TestSource}
+import akka.testkit.TestKit
+import com.lolboxen.nats.ConnectionSource.{Connected, Protocol}
+import com.lolboxen.nats.Publisher.Factory
+import io.nats.client.{Connection, JetStream, JetStreamOptions, Message}
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future, Promise}
-import scala.util.Try
+class PublishFlowTest
+  extends TestKit(ActorSystem("PublishFlowTest"))
+    with AnyFlatSpecLike
+    with Matchers
+    with ScalaFutures
+    with MockFactory
+    with BeforeAndAfterAll {
 
-class PublishFlowTest extends AnyFlatSpec with Matchers {
+  override def afterAll(): Unit = TestKit.shutdownActorSystem(system)
 
-  implicit val system: ActorSystem = ActorSystem()
-  val message: Message = NatsMessage.builder().subject("test").data("test").build()
+  it should "publish messages to jetstream when connected" in {
+    val connection = mock[Connection]
+    val jetStream = mock[JetStream]
+    val message = mock[Message]
+    (connection.jetStream(_: JetStreamOptions)).expects(*).once().returning(jetStream)
+    (jetStream.publishAsync(_: Message)).expects(*).returning(null)
 
-  it should "preserve attached context when message was acked by server" in {
-    val support = new TestSupport
+    val (msgPub, conPub, sub) = runningGraphForTesting(Publisher.jetStream(JetStreamOptions.defaultOptions()))
 
-    val probe = Source(Seq(message -> "1", message -> "2", message -> "3"))
-      .via(Flow.fromGraph(new PublishFlow[String](support)))
-      .mapAsync(1)(identity)
-      .map(x => (x._2, x._3))
-      .runWith(TestSink.probe)
-
-    support.giveth()
-    probe
-      .ensureSubscription()
-      .requestNext(message -> "1")
-      .requestNext(message -> "2")
-      .requestNext(message -> "3")
-      .request(1)
-      .expectComplete()
+    conPub.sendNext(Connected(connection))
+    msgPub.sendNext((message, ()))
+    sub.requestNext()
+    msgPub.sendComplete()
   }
 
-  it should "apply back pressure when publish queue is full" in {
-    val support = new TestSupport
+  it should "publish messages to core when connected" in {
+    val connection = mock[Connection]
+    val message = mock[Message]
+    (connection.publish(_: Message)).expects(*)
 
-    val (queue, _) = Source.queue(1)
-      .via(Flow.fromGraph(new PublishFlow[String](support)))
+    val (msgPub, conPub, sub) = runningGraphForTesting(Publisher.core)
+
+    conPub.sendNext(Connected(connection))
+    msgPub.sendNext((message, ()))
+    sub.requestNext()
+    msgPub.sendComplete()
+  }
+
+  private def runningGraphForTesting(publisherFactory: Factory) = {
+    val ((msgPub, conPub), sub) = TestSource[(Message, Unit)]
+      .viaMat(publishingGraph(TestSource[Protocol], publisherFactory))(Keep.both)
       .toMat(TestSink.probe)(Keep.both)
       .run()
 
-    queue.offer(message -> "1")
-    queue.offer(message -> "2")
-    queue.offer(message -> "3") shouldBe QueueOfferResult.dropped
-    queue.complete()
+    (msgPub, conPub, sub)
   }
 
-  it should "respect downstream backpressure" in {
-    val support = new TestSupport
-
-    val queue = Source.queue(1)
-      .via(Flow.fromGraph(new PublishFlow[String](support)))
-      .toMat(TestSink.probe)(Keep.left)
-      .run()
-
-    support.giveth()
-    queue.offer(message -> "1")
-    queue.offer(message -> "2")
-    queue.offer(message -> "3") shouldBe QueueOfferResult.dropped
-    queue.complete()
-  }
-
-  it should "fail when change listener fails" in {
-    val support = new TestSupport
-
-    val probe = Source.queue(1, OverflowStrategy.backpressure)
-      .via(Flow.fromGraph(new PublishFlow[String](support)))
-      .toMat(TestSink.probe)(Keep.right)
-      .run()
-
-    probe.ensureSubscription().expectNoMessage(1.second)
-    support.fail()
-    probe.expectError()
-  }
-
-  class TestSupport extends PublishAdapter with Cancellable {
-
-    implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
-
-    private var cancelCalled = false
-    private val listener: Promise[AdapterListener] = Promise()
-
-    override def open(listener: AdapterListener): Unit = {
-      this.listener.success(listener)
+  private def publishingGraph(connectionSource: Source[Protocol, TestPublisher.Probe[Protocol]],
+                              publisherFactory: Factory) =
+    GraphDSL.createGraph(connectionSource) { implicit builder => connection =>
+      import GraphDSL.Implicits._
+      val publish = builder.add(new PublishFlow[Unit](publisherFactory))
+      connection.out ~> publish.protocol
+      FlowShape(publish.message, publish.out)
     }
-
-    override def close(): Unit = ()
-
-    override def apply(message: Message)(implicit ec: ExecutionContext): Future[Option[PublishAck]] = Future.successful(Some(null))
-
-    override def cancel(): Boolean = {
-      cancelCalled = true
-      true
-    }
-
-    override def isCancelled: Boolean = cancelCalled
-
-    def giveth(): Unit = listener.future.map(_.resumeOperations())
-
-    def fail(): Unit = listener.future.map(_.suspendOperationsIndefinitely(new Exception("test induced exception")))
-
-    def expectCancelled(): Unit = assert(cancelCalled)
-  }
 }

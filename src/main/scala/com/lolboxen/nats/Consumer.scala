@@ -1,24 +1,32 @@
 package com.lolboxen.nats
 
 import akka.stream.scaladsl.Source
-import io.nats.client.{Message, PullSubscribeOptions, PushSubscribeOptions}
+import io.nats.client._
+
+import java.time.Duration
+import scala.concurrent.ExecutionContext
 
 object Consumer {
-  def jetStreamSource(url: String, subject: String, pullSubscribeOptions: PullSubscribeOptions): Source[Message, Control] = {
-    val natsConnection = new NatsConnection(url)
-    val adapter = new JetStreamPullSubscriptionAdapter(natsConnection, subject, pullSubscribeOptions)
-    Source.fromGraph(new SubscriptionSource(adapter))
-  }
+  def coreSource(subject: String, options: Options.Builder): Source[Message, Control] =
+    Source.fromGraph(new ConnectionSource(new NatsConnector(options)))
+      .via(new CoreSubscriptionSource(subject))
 
-  def jetStreamSource(url: String, subject: String, pushSubscribeOptions: PushSubscribeOptions): Source[Message, Control] = {
-    val natsConnection = new NatsConnection(url)
-    val adapter = new JetStreamPushSubscriptionAdapter(natsConnection, subject, pushSubscribeOptions)
-    Source.fromGraph(new SubscriptionSource(adapter))
-  }
+  def jetStreamSource(subject: String,
+                      autoAck: Boolean,
+                      options: Options.Builder,
+                      jso: JetStreamOptions,
+                      pushOptions: PushSubscribeOptions): Source[Message, Control] =
+    Source.fromGraph(new ConnectionSource(new NatsConnector(options)))
+      .via(new JetStreamPushSubscriptionSource(subject, autoAck, jso, pushOptions))
 
-  def coreSource(url: String, subject: String): Source[Message, Control] = {
-    val natsConnection = new NatsConnection(url)
-    val adapter = new CoreSubscriptionAdapter(natsConnection, subject)
-    Source.fromGraph(new SubscriptionSource(adapter))
-  }
+  def jetStreamSource(subject: String,
+                      fetchSize: Int,
+                      fetchDuration: Duration,
+                      fetchExecutionContext: ExecutionContext,
+                      options: Options.Builder,
+                      jso: JetStreamOptions,
+                      pullOptions: PullSubscribeOptions): Source[Message, Control] =
+    Source.fromGraph(new ConnectionSource(new NatsConnector(options)))
+      .via(new JetStreamPullSubscriptionSource(subject, fetchSize, fetchDuration, fetchExecutionContext, jso, pullOptions))
+      .mapConcat(identity)
 }
