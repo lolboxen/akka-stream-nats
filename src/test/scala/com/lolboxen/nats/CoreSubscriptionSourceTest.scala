@@ -35,9 +35,9 @@ class CoreSubscriptionSourceTest
     (dispatcher.isActive _).expects().once().returning(true)
     (dispatcher.unsubscribe(_: String)).expects("subject").once()
 
-    val (pub, sub) = TestSource[Protocol]
+    val (pub, sub) = TestSource[Protocol]()
       .via(Flow.fromGraph(new CoreSubscriptionSource("subject")))
-      .toMat(TestSink.probe)(Keep.both)
+      .toMat(TestSink())(Keep.both)
       .run()
 
     pub.sendNext(Connected(connection))

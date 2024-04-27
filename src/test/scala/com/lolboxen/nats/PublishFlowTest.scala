@@ -54,9 +54,9 @@ class PublishFlowTest
   }
 
   private def runningGraphForTesting(publisherFactory: Factory) = {
-    val ((msgPub, conPub), sub) = TestSource[(Message, Unit)]
-      .viaMat(publishingGraph(TestSource[Protocol], publisherFactory))(Keep.both)
-      .toMat(TestSink.probe)(Keep.both)
+    val ((msgPub, conPub), sub) = TestSource[(Message, Unit)]()
+      .viaMat(publishingGraph(TestSource[Protocol](), publisherFactory))(Keep.both)
+      .toMat(TestSink())(Keep.both)
       .run()
 
     (msgPub, conPub, sub)

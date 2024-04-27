@@ -37,7 +37,7 @@ class JetStreamPullSubscriptionSourceTest
     (jetStreamSubscription.isActive _).expects().once().returning(true)
     (jetStreamSubscription.unsubscribe: () => Unit).expects().once()
 
-    val (pub, sub) = TestSource[Protocol]
+    val (pub, sub) = TestSource[Protocol]()
       .via(Flow.fromGraph(new JetStreamPullSubscriptionSource(
         "subject",
         100,
@@ -45,7 +45,7 @@ class JetStreamPullSubscriptionSourceTest
         ExecutionContext.global,
         JetStreamOptions.defaultOptions(),
         PullSubscribeOptions.bind("stream", "durable"))))
-      .toMat(TestSink.probe)(Keep.both)
+      .toMat(TestSink())(Keep.both)
       .run()
 
     pub.sendNext(Connected(connection))
