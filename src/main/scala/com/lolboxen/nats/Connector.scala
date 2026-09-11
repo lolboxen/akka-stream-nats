@@ -16,7 +16,7 @@ class NatsConnector(optionsBuilder: Options.Builder) extends Connector {
   def apply(unifiedListener: UnifiedListener): Cancellable = {
     val runnable: Runnable with Cancellable = new Runnable with Cancellable {
 
-      private val unifiedListenerAdapter = new UnifiedListenerAdapter(unifiedListener)
+      private val unifiedListenerAdapter = UnifiedListenerAdapter(unifiedListener)
 
       @volatile private var _cancel: Boolean = false
       @volatile private var _cancelled: Boolean = false
@@ -73,7 +73,7 @@ class NatsConnector(optionsBuilder: Options.Builder) extends Connector {
 
       override def isCancelled: Boolean = _cancelled
     }
-    new Thread(runnable).start()
+    Thread(runnable).start()
     runnable
   }
 

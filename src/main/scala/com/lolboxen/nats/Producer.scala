@@ -90,8 +90,8 @@ object Producer {
   : Graph[FlowShape[(Message, C), Future[(Option[PublishAck], Message, C)]], NotUsed] =
     GraphDSL.create() { implicit builder =>
       import GraphDSL.Implicits._
-      val connection = builder.add(new ConnectionSource(new NatsConnector(optionsBuilder)))
-      val publish = builder.add(new PublishFlow[C](publisherFactory))
+      val connection = builder.add(ConnectionSource(NatsConnector(optionsBuilder)))
+      val publish = builder.add(PublishFlow[C](publisherFactory))
       connection.out ~> publish.protocol
       FlowShape(publish.message, publish.out)
     }

@@ -41,7 +41,7 @@ class ConnectionSource(connector: Connector)
 
       override def preStart(): Unit = {
         super.preStart()
-        initialConnectionCancellable = Some(connector(new UnifiedListenerAsync(this)))
+        initialConnectionCancellable = Some(connector(UnifiedListenerAsync(this)))
       }
 
       override def postStop(): Unit = {
@@ -99,6 +99,6 @@ class ConnectionSource(connector: Connector)
         log.error(cause, "received non fatal error from nats connection")
     }
 
-    stageLogic -> new ControlAsync(stageLogic)
+    stageLogic -> ControlAsync(stageLogic)
   }
 }

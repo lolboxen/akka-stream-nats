@@ -25,8 +25,8 @@ class ConnectionSourceTest
   override def afterAll(): Unit = TestKit.shutdownActorSystem(system)
 
   it should "emit lifecycle events" in {
-    val connector = new FakeConnector
-    val probe = Source.fromGraph(new ConnectionSource(connector)).runWith(TestSink())
+    val connector = FakeConnector()
+    val probe = Source.fromGraph(ConnectionSource(connector)).runWith(TestSink())
     val connection = mock[Connection]
 
     whenReady(connector.listener) { listener =>
@@ -39,8 +39,8 @@ class ConnectionSourceTest
   }
 
   it should "not emit repeating disconnected events" in {
-    val connector = new FakeConnector
-    val probe = Source.fromGraph(new ConnectionSource(connector)).runWith(TestSink())
+    val connector = FakeConnector()
+    val probe = Source.fromGraph(ConnectionSource(connector)).runWith(TestSink())
     val connection = mock[Connection]
 
     whenReady(connector.listener) { listener =>
@@ -55,8 +55,8 @@ class ConnectionSourceTest
   }
 
   it should "complete on permanent connection closure" in {
-    val connector = new FakeConnector
-    val probe = Source.fromGraph(new ConnectionSource(connector)).runWith(TestSink())
+    val connector = FakeConnector()
+    val probe = Source.fromGraph(ConnectionSource(connector)).runWith(TestSink())
     val connection = mock[Connection]
 
     whenReady(connector.listener) { listener =>

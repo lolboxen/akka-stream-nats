@@ -4,32 +4,31 @@ import akka.stream.stage.{GraphStage, GraphStageLogic}
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import com.lolboxen.nats.ConnectionSource.Protocol
 import io.nats.client._
-import io.nats.client.support.NatsJetStreamConstants
 
 import java.time.Duration
-import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters.*
 
 class JetStreamPullSubscriptionSource(subject: String,
                                       fetchSize: Int,
                                       fetchTimeout: Duration,
-                                      fetchExecutionContext: ExecutionContext,
+                                      executionContext: ExecutionContext,
                                       jetStreamOptions: JetStreamOptions,
-                                      pullOptions: PullSubscribeOptions) extends GraphStage[FlowShape[Protocol, Seq[Message]]] {
+                                      pullOptions: PullSubscribeOptions)
+  extends GraphStage[FlowShape[Protocol, Message]] {
   require(fetchSize > 0, "fetchSize must be greater than 0")
-  require(fetchSize <= NatsJetStreamConstants.MAX_PULL_SIZE, s"maximum fetchSize is ${NatsJetStreamConstants.MAX_PULL_SIZE}")
+  require(fetchTimeout != null && fetchTimeout.toMillis > 0, "fetchTimeout must be at least 1 millisecond")
 
   protected val in: Inlet[Protocol] = Inlet("JetStreamPullSubscriptionSource.in")
-  protected val out: Outlet[Seq[Message]] = Outlet("JetStreamPullSubscriptionSource.out")
-  override def shape: FlowShape[Protocol, Seq[Message]] = FlowShape(in, out)
+  protected val out: Outlet[Message] = Outlet("JetStreamPullSubscriptionSource.out")
+  override def shape: FlowShape[Protocol, Message] = FlowShape(in, out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new JetStreamPullSubscriptionSourceLogic(
+    JetStreamPullSubscriptionSourceLogic(
       subject,
       fetchSize,
       fetchTimeout,
-      fetchExecutionContext,
+      executionContext,
       jetStreamOptions,
       pullOptions,
       inheritedAttributes,
@@ -40,38 +39,21 @@ class JetStreamPullSubscriptionSource(subject: String,
 class JetStreamPullSubscriptionSourceLogic(subject: String,
                                            fetchSize: Int,
                                            fetchTimeout: Duration,
-                                           fetchExecutionContext: ExecutionContext,
+                                           executionContext: ExecutionContext,
                                            jetStreamOptions: JetStreamOptions,
                                            pullOptions: PullSubscribeOptions,
                                            inheritedAttributes: Attributes,
-                                           shape: FlowShape[Protocol, Seq[Message]]
-                                          ) extends SubscriptionLogic[Seq[Message], JetStreamSubscription](shape, inheritedAttributes) {
+                                           shape: FlowShape[Protocol, Message])
+  extends PullSubscriptionLogic[JetStreamSubscription](executionContext, shape, inheritedAttributes) {
 
-  private val fetchResultCallback = getAsyncCallback[Try[Seq[Message]]](fetchResult)
+  override protected def name: Option[String] = Some(subject)
 
-  override protected def subscribe(connection: Connection): JetStreamSubscription = {
-    logSubscriptionChange(subject, subscribed = true)
-    val sub = connection.jetStream(jetStreamOptions).subscribe(subject, pullOptions)
-    if (isAvailable(shape.out)) fetch(sub)
-    sub
-  }
+  override protected def subscribe(connection: Connection): JetStreamSubscription =
+    connection.jetStream(jetStreamOptions).subscribe(subject, pullOptions)
 
-  override protected def unsubscribe(subscription: JetStreamSubscription): Unit = {
-    logSubscriptionChange(subject, subscribed = false)
+  override protected def unsubscribe(subscription: JetStreamSubscription): Unit =
     if (subscription.isActive) subscription.unsubscribe()
-  }
 
-  override def onPull(): Unit = subscription.foreach(fetch)
-
-  private def fetch(sub: JetStreamSubscription): Unit =
-    Future {
-      sub.fetch(fetchSize, fetchTimeout).asScala.toSeq
-    }(fetchExecutionContext).onComplete(fetchResultCallback.invoke)(ExecutionContext.parasitic)
-
-  private def fetchResult(messages: Try[Seq[Message]]): Unit = {
-    messages match {
-      case Success(value) => push(shape.out, value)
-      case Failure(_) => onPull()
-    }
-  }
+  override protected def startPull(subscription: JetStreamSubscription): Seq[Message] =
+    subscription.fetch(fetchSize, fetchTimeout).asScala.toVector
 }

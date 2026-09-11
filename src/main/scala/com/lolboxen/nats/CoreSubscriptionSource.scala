@@ -3,28 +3,34 @@ package com.lolboxen.nats
 import akka.stream.stage.{GraphStage, GraphStageLogic}
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import com.lolboxen.nats.ConnectionSource.Protocol
-import io.nats.client.{Connection, Dispatcher, Message}
+import io.nats.client.{Connection, Message, Subscription}
 
-class CoreSubscriptionSource(subject: String) extends GraphStage[FlowShape[Protocol, Message]] {
+import scala.concurrent.ExecutionContext
+
+class CoreSubscriptionSource(subject: String, executionContext: ExecutionContext)
+  extends GraphStage[FlowShape[Protocol, Message]] {
 
   protected val in: Inlet[Protocol] = Inlet("CoreSubscriptionSource.in")
   protected val out: Outlet[Message] = Outlet("CoreSubscriptionSource.out")
   override def shape: FlowShape[Protocol, Message] = FlowShape(in, out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new CoreSubscriptionSourceLogic(subject, inheritedAttributes, shape)
+    CoreSubscriptionSourceLogic(subject, executionContext, inheritedAttributes, shape)
 }
 
-class CoreSubscriptionSourceLogic(subject: String, inheritedAttributes: Attributes, shape: FlowShape[Protocol, Message])
-  extends PushSubscriptionLogic[Dispatcher](shape, inheritedAttributes) {
+class CoreSubscriptionSourceLogic(subject: String,
+                                  executionContext: ExecutionContext,
+                                  inheritedAttributes: Attributes,
+                                  shape: FlowShape[Protocol, Message])
+  extends PullSubscriptionLogic[Subscription](executionContext, shape, inheritedAttributes) {
 
-  override protected def subscribe(connection: Connection): Dispatcher = {
-    logSubscriptionChange(subject, subscribed = true)
-    connection.createDispatcher(new MessageHandlerAsync(this)).subscribe(subject)
-  }
+  override protected def name: Option[String] = Some(subject)
 
-  override protected def unsubscribe(subscription: Dispatcher): Unit = {
-    logSubscriptionChange(subject, subscribed = false)
-    if (subscription.isActive) subscription.unsubscribe(subject)
-  }
+  override protected def subscribe(connection: Connection): Subscription = connection.subscribe(subject)
+
+  override protected def unsubscribe(subscription: Subscription): Unit =
+    if subscription.isActive then subscription.unsubscribe()
+
+  override protected def startPull(subscription: Subscription): Seq[Message] =
+    Option(subscription.nextMessage(1000)).toSeq
 }

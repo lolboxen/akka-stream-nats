@@ -66,7 +66,7 @@ class PublishFlowTest
                               publisherFactory: Factory) =
     GraphDSL.createGraph(connectionSource) { implicit builder => connection =>
       import GraphDSL.Implicits._
-      val publish = builder.add(new PublishFlow[Unit](publisherFactory))
+      val publish = builder.add(PublishFlow[Unit](publisherFactory))
       connection.out ~> publish.protocol
       FlowShape(publish.message, publish.out)
     }

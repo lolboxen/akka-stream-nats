@@ -5,7 +5,7 @@ import akka.stream.scaladsl.{Flow, Keep}
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.testkit.TestKit
 import com.lolboxen.nats.ConnectionSource.{Connected, Protocol}
-import io.nats.client._
+import io.nats.client.*
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -13,7 +13,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import util.MockUtils.captureAndReturn
 
-import scala.concurrent.Promise
+import scala.concurrent.{ExecutionContext, Promise}
 
 class JetStreamPushSubscriptionSourceTest
   extends TestKit(ActorSystem("JetStreamPushSubscriptionSource"))
@@ -42,9 +42,10 @@ class JetStreamPushSubscriptionSourceTest
     (jetStreamSubscription.unsubscribe: () => Unit).expects().once()
 
     val (pub, sub) = TestSource[Protocol]()
-      .via(Flow.fromGraph(new JetStreamPushSubscriptionSource(
+      .via(Flow.fromGraph(JetStreamPushSubscriptionSource(
         "subject",
         true,
+        ExecutionContext.global,
         JetStreamOptions.defaultOptions(),
         PushSubscribeOptions.bind("stream", "durable"))))
       .toMat(TestSink())(Keep.both)

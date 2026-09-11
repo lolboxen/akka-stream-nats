@@ -40,7 +40,7 @@ class PublishFlow[C](publisherFactory: Factory) extends GraphStage[PublishShape[
   override val shape: PublishShape[C] = PublishShape(messageIn, out, protocolIn)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new PublishFlowLogic(publisherFactory, inheritedAttributes, shape)
+    PublishFlowLogic(publisherFactory, inheritedAttributes, shape)
 }
 
 class PublishFlowLogic[C](publisherFactory: Factory,
